@@ -1,8 +1,9 @@
 """
 PynamoDB Indexes
 """
+import functools
 from inspect import getmembers
-from typing import Any, Dict, Generic, List, Optional, Type, TypeVar
+from typing import Any, Dict, Generic, List, Optional, Type, TypeVar, Union
 from typing import TYPE_CHECKING
 
 from pynamodb.constants import (
@@ -27,6 +28,7 @@ class Index(Generic[_M]):
     Base class for secondary indexes
     """
     Meta: Any = None
+    _model: _M
 
     @classmethod
     def __init_subclass__(cls, **kwargs):
@@ -43,14 +45,20 @@ class Index(Generic[_M]):
             raise ValueError("No projection defined, define a projection for this class")
 
     def __set_name__(self, owner: Type[_M], name: str):
-        if not hasattr(self.Meta, "model"):
-            self.Meta.model = owner
+        if not hasattr(type(self), "_model"):
+            type(self)._model = owner
         if not hasattr(self.Meta, "index_name"):
             self.Meta.index_name = name
 
-    @classmethod
+    class classorinstancemethod:
+        def __init__(self, func):
+            self.func = func
+        def __get__(self, instance, owner):
+            return functools.partial(self.func, instance or owner)
+
+    @classorinstancemethod
     def count(
-        cls,
+        obj: Union[Type['Index'], 'Index'],
         hash_key: _KeyType,
         range_key_condition: Optional[Condition] = None,
         filter_condition: Optional[Condition] = None,
@@ -61,19 +69,19 @@ class Index(Generic[_M]):
         """
         Count on an index
         """
-        return cls.Meta.model.count(
+        return obj._model.count(  # type: ignore
             hash_key,
             range_key_condition=range_key_condition,
             filter_condition=filter_condition,
-            index_name=cls.Meta.index_name,
+            index_name=obj.Meta.index_name,
             consistent_read=consistent_read,
             limit=limit,
             rate_limit=rate_limit,
         )
 
-    @classmethod
+    @classorinstancemethod
     def query(
-        cls,
+        obj: Union[Type['Index'], 'Index'],
         hash_key: _KeyType,
         range_key_condition: Optional[Condition] = None,
         filter_condition: Optional[Condition] = None,
@@ -88,12 +96,12 @@ class Index(Generic[_M]):
         """
         Queries an index
         """
-        return cls.Meta.model.query(
+        return obj._model.query(  # type: ignore
             hash_key,
             range_key_condition=range_key_condition,
             filter_condition=filter_condition,
             consistent_read=consistent_read,
-            index_name=cls.Meta.index_name,
+            index_name=obj.Meta.index_name,
             scan_index_forward=scan_index_forward,
             limit=limit,
             last_evaluated_key=last_evaluated_key,
@@ -102,9 +110,9 @@ class Index(Generic[_M]):
             rate_limit=rate_limit,
         )
 
-    @classmethod
+    @classorinstancemethod
     def scan(
-        cls,
+        obj: Union[Type['Index'], 'Index'],
         filter_condition: Optional[Condition] = None,
         segment: Optional[int] = None,
         total_segments: Optional[int] = None,
@@ -118,7 +126,7 @@ class Index(Generic[_M]):
         """
         Scans an index
         """
-        return cls.Meta.model.scan(
+        return obj._model.scan(  # type: ignore
             filter_condition=filter_condition,
             segment=segment,
             total_segments=total_segments,
@@ -126,7 +134,7 @@ class Index(Generic[_M]):
             last_evaluated_key=last_evaluated_key,
             page_size=page_size,
             consistent_read=consistent_read,
-            index_name=cls.Meta.index_name,
+            index_name=obj.Meta.index_name,
             rate_limit=rate_limit,
             attributes_to_get=attributes_to_get,
         )
